@@ -19,7 +19,7 @@ const dynamoClient = new DynamoDBClient({
 const tableName = 'project-product-table';
 
 // Obtener todos los productos
-app.get('/api/productos', (req, res) => {
+app.get('/productos', (req, res) => {
   const params = { TableName: tableName };
   const command = new ScanCommand(params);
 
@@ -32,7 +32,7 @@ app.get('/api/productos', (req, res) => {
 });
 
 // Agregar un nuevo producto
-app.post('/api/productos', (req, res) => {
+app.post('/productos', (req, res) => {
   const { productId, name, description, price, quantity } = req.body;
   const params = {
     TableName: tableName,
@@ -55,7 +55,7 @@ app.post('/api/productos', (req, res) => {
 });
 
 // Actualizar un producto
-app.put('/api/productos/:id', (req, res) => {
+app.put('/productos/:id', (req, res) => {
   const { id } = req.params;
   const { name, description, price, quantity } = req.body;
 
@@ -88,7 +88,7 @@ app.put('/api/productos/:id', (req, res) => {
 });
 
 // Eliminar un producto
-app.delete('/api/productos/:id', (req, res) => {
+app.delete('/productos/:id', (req, res) => {
   const { id } = req.params;
 
   const params = {
