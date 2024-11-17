@@ -1,89 +1,111 @@
 const express = require('express');
-const AWS = require('aws-sdk');
+const { DynamoDBClient, PutItemCommand, ScanCommand, UpdateItemCommand, DeleteItemCommand } = require('@aws-sdk/client-dynamodb');
+const cors = require('cors');
+require('dotenv').config();  // Cargar variables de entorno desde el archivo .env
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
-const dynamoClient = new AWS.DynamoDB.DocumentClient({
-  region: 'us-east-1', // Cambia según tu región
+// Configuración del cliente DynamoDB con las variables de entorno
+const dynamoClient = new DynamoDBClient({
+  region: process.env.AWS_REGION,  // Usar la región desde las variables de entorno
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,  // Usar la clave de acceso de las variables de entorno
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,  // Usar la clave secreta de las variables de entorno
+  },
 });
+
 const tableName = 'project-product-table';
 
 // Obtener todos los productos
-app.get('/api/productos', async (req, res) => {
+app.get('/api/productos', (req, res) => {
   const params = { TableName: tableName };
-  try {
-    const data = await dynamoClient.scan(params).promise();
+  const command = new ScanCommand(params);
+
+  dynamoClient.send(command).then((data) => {
     res.json(data.Items);
-  } catch (err) {
+  }).catch((err) => {
     console.error(err);
     res.status(500).send('Error al obtener productos');
-  }
+  });
 });
 
 // Agregar un nuevo producto
-app.post('/api/productos', async (req, res) => {
+app.post('/api/productos', (req, res) => {
   const { productId, name, description, price, quantity } = req.body;
   const params = {
     TableName: tableName,
-    Item: { productId, name, description, price, quantity },
+    Item: {
+      productId: { S: productId }, // DynamoDB requiere el tipo de dato en el valor
+      name: { S: name },
+      description: { S: description },
+      price: { N: price }, // Asegúrate de que los números estén en formato de cadena
+      quantity: { N: quantity },
+    },
   };
-  try {
-    await dynamoClient.put(params).promise();
+  const command = new PutItemCommand(params);
+
+  dynamoClient.send(command).then(() => {
     res.status(201).send('Producto creado');
-  } catch (err) {
+  }).catch((err) => {
     console.error(err);
     res.status(500).send('Error al crear producto');
-  }
+  });
 });
 
 // Actualizar un producto
 app.put('/api/productos/:id', (req, res) => {
-    const { id } = req.params;
-    const { name, description, price, quantity } = req.body;
-  
-    const params = {
-      TableName: tableName,
-      Key: { productId: id },
-      UpdateExpression: 'set #n = :n, description = :d, price = :p, quantity = :q',
-      ExpressionAttributeNames: { '#n': 'name' },
-      ExpressionAttributeValues: {
-        ':n': name,
-        ':d': description,
-        ':p': price,
-        ':q': quantity,
-      },
-      ReturnValues: 'UPDATED_NEW',
-    };
-  
-    dynamoClient.update(params, (err, data) => {
-      if (err) {
-        console.error('Error al actualizar producto:', err);
-        res.status(500).send('Error al actualizar producto');
-      } else {
-        res.json(data.Attributes); // Devuelve los nuevos valores actualizados
-      }
-    });
-  });
+  const { id } = req.params;
+  const { name, description, price, quantity } = req.body;
 
-  // Eliminar un producto
-app.delete('/api/productos/:id', (req, res) => {
-    const { id } = req.params;
+  const params = {
+    TableName: tableName,
+    Key: {
+      productId: { S: id },
+    },
+    UpdateExpression: 'SET #n = :n, description = :d, price = :p, quantity = :q',
+    ExpressionAttributeNames: {
+      '#n': 'name',
+    },
+    ExpressionAttributeValues: {
+      ':n': { S: name },
+      ':d': { S: description },
+      ':p': { N: price.toString() },
+      ':q': { N: quantity.toString() },
+    },
+    ReturnValues: 'ALL_NEW',
+  };
   
-    const params = {
-      TableName: tableName,
-      Key: { productId: id },
-    };
-  
-    dynamoClient.delete(params, (err, data) => {
-      if (err) {
-        console.error('Error al eliminar producto:', err);
-        res.status(500).send('Error al eliminar producto');
-      } else {
-        res.send('Producto eliminado exitosamente');
-      }
-    });
+  const command = new UpdateItemCommand(params);
+
+  dynamoClient.send(command).then((data) => {
+    res.json(data.Attributes); // Devuelve los nuevos valores actualizados
+  }).catch((err) => {
+    console.error('Error al actualizar producto:', err);
+    res.status(500).send('Error al actualizar producto');
   });
-  
+});
+
+// Eliminar un producto
+app.delete('/api/productos/:id', (req, res) => {
+  const { id } = req.params;
+
+  const params = {
+    TableName: tableName,
+    Key: {
+      productId: { S: id },
+    },
+  };
+
+  const command = new DeleteItemCommand(params);
+
+  dynamoClient.send(command).then(() => {
+    res.send('Producto eliminado exitosamente');
+  }).catch((err) => {
+    console.error('Error al eliminar producto:', err);
+    res.status(500).send('Error al eliminar producto');
+  });
+});
 
 app.listen(3000, () => console.log('Server running on port 3000'));
